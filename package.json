@@ -1,20 +1,39 @@
 {
   "name": "whatsapp-opencode",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "通过 WhatsApp 控制 OpenCode AI 助手",
+  "main": "bridge.js",
   "scripts": {
     "start": "node bridge.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "node bridge.js",
+    "test": "echo \"No test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "opencode",
+    "whatsapp",
+    "ai",
+    "assistant",
+    "bridge",
+    "chatbot"
+  ],
+  "author": "Jinghai <jinghai@email.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jinghai/whatsapp-opencode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jinghai/whatsapp-opencode/issues"
+  },
+  "homepage": "https://github.com/jinghai/whatsapp-opencode#readme",
   "dependencies": {
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "axios": "^1.13.5",
     "form-data": "^4.0.5",
     "pino": "^10.3.1",
     "qrcode-terminal": "^0.12.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

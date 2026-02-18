@@ -1,10 +1,10 @@
-# 🚀 OpenCode WhatsApp Bridge
+# 🚀 WhatsApp OpenCode Bridge
 
 <p align="center">
   <img src="https://img.shields.io/badge/Node.js-18+-green?logo=node.js" alt="Node.js">
-  <img src="https://img.shields.io/badge/OpenCode-Compatible-blue" alt="OpenCode">
   <img src="https://img.shields.io/badge/WhatsApp-Baileys-25D366?logo=whatsapp" alt="WhatsApp">
   <img src="https://img.shields.io/badge/License-MIT-yellow" alt="License">
+  <img src="https://img.shields.io/github/v/release/jinghai/whatsapp-opencode" alt="GitHub release">
 </p>
 
 <p align="center">
@@ -19,51 +19,78 @@
 - 📱 **完整消息支持**
   - 文本消息 - 双向实时同步
   - 图片消息 - 自动保存到本地
-  - 语音消息 - ASR自动转录（硅基流动SenseVoiceSmall）
+  - 语音消息 - ASR自动转录（硅基流动 SenseVoice）
 
-- 🔄 **多端同步**
-  - TUI端和WhatsApp消息实时同步
-  - 独立session设计，不阻塞TUI操作
-  - 消息状态持久化
+- 🔄 **智能处理**
+  - 长任务进度通知
+  - 输入状态实时显示
+  - 自动超时处理和会话恢复
 
 - 🛡️ **安全特性**
   - 手机号白名单限制
-  - 独立会话隔离
   - 敏感信息环境变量配置
+  - 消息内容过滤
 
-## 📦 安装
+---
 
-### 前置要求
+## 📋 环境要求
 
 - Node.js >= 18
-- OpenCode CLI 已安装
+- OpenCode CLI 已安装并运行
 - WhatsApp 账号
 
-### 快速开始
+---
+
+## 🚀 快速开始
+
+### 1. 克隆项目
 
 ```bash
-# 1. 克隆项目
-git clone https://github.com/jinghai/opencode-whatsapp-bridge.git
-cd opencode-whatsapp-bridge
+git clone https://github.com/jinghai/whatsapp-opencode.git
+cd whatsapp-opencode
+```
 
-# 2. 安装依赖
+### 2. 安装依赖
+
+```bash
 npm install
+```
 
-# 3. 配置环境变量
+### 3. 配置环境变量
+
+```bash
 cp .env.example .env
 # 编辑 .env 文件
 ```
 
-## ⚙️ 配置
-
-### 基础配置
+### 4. 启动 OpenCode 服务
 
 ```bash
-# .env
-OPENCODE_URL=http://127.0.0.1:4096
-SILICONFLOW_KEY=your_siliconflow_api_key
-ALLOWLIST=86138xxxx,86139xxxx  # 可选：限制手机号
+# 启动 OpenCode API 服务
+opencode serve --port 4096
 ```
+
+### 5. 启动 Bridge
+
+```bash
+npm start
+```
+
+### 6. 连接 WhatsApp
+
+首次运行会显示二维码，按照屏幕提示扫描连接。
+
+---
+
+## ⚙️ 配置说明
+
+### 环境变量
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `OPENCODE_URL` | OpenCode API 地址 | `http://127.0.0.1:4096` |
+| `SILICONFLOW_KEY` | 硅基流动 API Key | - |
+| `ALLOWLIST` | 允许的手机号(逗号分隔) | 所有用户 |
 
 ### 获取 SiliconFlow API Key
 
@@ -71,74 +98,32 @@ ALLOWLIST=86138xxxx,86139xxxx  # 可选：限制手机号
 2. 注册并创建 API Key
 3. 复制 Key 到 `.env` 文件
 
-## 🚀 使用
+---
 
-### 1. 启动 OpenCode
+## 📖 使用指南
 
-```bash
-opencode serve --port 4096
-```
-
-### 2. 启动 Bridge
-
-```bash
-npm start
-```
-
-### 3. 连接 WhatsApp
-
-首次运行会显示二维码：
-
-```
-========================================
-请用 WhatsApp 扫描二维码:
-========================================
-
-[二维码图片]
-
-========================================
-步骤：
-1. 打开 WhatsApp 手机应用
-2. 点击右上角 ⋮ → 已关联的设备
-3. 点击 "关联新设备"
-4. 扫描二维码
-========================================
-```
-
-### 4. 开始使用
+### 基本操作
 
 - **发送文本** - 直接在 WhatsApp 输入文字
-- **发送图片** - 发送图片，OpenCode 会收到图片路径
+- **发送图片** - 发送图片，自动保存并通知 OpenCode
 - **发送语音** - 发送语音，自动转文字后处理
 
-## 📸 使用示例
+### 消息处理
 
-<!-- TODO: 添加截图 -->
+- 简单任务：立即回复
+- 长时间任务：
+  - 10秒后显示"对方正在输入..."
+  - 每5分钟发送进度通知
+  - 10分钟超时自动创建新会话
 
-### 文本消息
-```
-你：你好，帮我写一个Python脚本
-AI：好的，我来帮你写一个Python脚本...
-```
-
-### 图片消息
-```
-你：[发送图片]
-AI：收到图片，路径：/root/media/img_xxx.jpg
-```
-
-### 语音消息
-```
-你：[发送语音]
-AI：🎤 转录："请帮我查询天气"
-    📝 处理结果：...
-```
+---
 
 ## 🏗️ 架构
 
 ```
 ┌─────────────────┐
-│  WhatsApp App   │
+│   WhatsApp      │
+│      App        │
 └────────┬────────┘
          │
          ▼
@@ -147,75 +132,124 @@ AI：🎤 转录："请帮我查询天气"
 └────────┬────────┘
          │
          ▼
-┌─────────────────────────┐
-│   Bridge Server         │
-│  - 消息处理             │
-│  - 语音转录             │
-│  - Session管理          │
-└────────┬────────────────┘
+┌─────────────────────────────┐
+│    WhatsApp OpenCode Bridge │
+│  • 消息处理                │
+│  • 语音转录                │
+│  • 会话管理                │
+│  • 进度通知                │
+└────────┬────────────────────┘
          │
          ▼
-┌─────────────────────────┐
-│   OpenCode API          │
-│  (http://localhost:4096)│
-└─────────────────────────┘
+┌─────────────────────────────┐
+│      OpenCode API           │
+│   (http://localhost:4096)  │
+└─────────────────────────────┘
 ```
+
+---
 
 ## 🔧 高级配置
 
-### PM2 进程管理
+### PM2 进程管理（推荐）
 
 ```bash
 # 安装 PM2
 npm install -g pm2
 
 # 启动服务
-pm2 start src/bridge.js --name opencode-whatsapp
+pm2 start bridge.js --name whatsapp-opencode
 
 # 查看日志
-pm2 logs opencode-whatsapp
+pm2 logs whatsapp-opencode
 
 # 开机自启
 pm2 startup
 pm2 save
 ```
 
-### 多设备支持
+### Docker 部署
 
-每个手机号使用独立session：
-```javascript
-// 自动为每个手机号创建独立session
-const sessionId = await createSession(phoneNumber);
+```bash
+docker build -t whatsapp-opencode .
+docker run -d \
+  --name whatsapp-opencode \
+  -v $(pwd)/auth:/app/auth \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/logs:/app/logs \
+  -v $(pwd)/media:/app/media \
+  -e OPENCODE_URL=http://host.docker.internal:4096 \
+  -e SILICONFLOW_KEY=your_api_key \
+  whatsapp-opencode
 ```
+
+---
+
+## 📁 目录结构
+
+```
+whatsapp-opencode/
+├── auth/              # WhatsApp 认证信息
+├── data/              # 会话状态数据
+├── logs/              # 运行日志
+├── media/             # 媒体文件(图片/语音)
+├── node_modules/      # 依赖
+├── bridge.js          # 主程序
+├── package.json       # 项目配置
+├── .env.example       # 环境变量示例
+└── README.md          # 说明文档
+```
+
+---
+
+## 🔢 版本管理
+
+采用 [Semantic Versioning](https://semver.org/)：
+
+- **MAJOR** (1.0.0): 不兼容的 API 变更
+- **MINOR** (1.1.0): 向后兼容的新功能
+- **PATCH** (1.0.1): 向后兼容的 bug 修复
+
+### 发布流程
+
+```bash
+# 1. 更新版本
+npm version patch  # 或 minor major
+
+# 2. 推送到 GitHub
+git push origin main
+git push --tags
+
+# 3. GitHub会自动创建 Release
+```
+
+---
 
 ## 📝 日志
 
 日志保存在 `logs/` 目录：
 - `wa-bridge.log` - 主日志
-- `pm2-out.log` - PM2 输出
-- `pm2-err.log` - 错误日志
+
+PM2 日志：
+- `pm2 logs whatsapp-opencode`
+
+---
 
 ## 🤝 贡献
 
 欢迎提交 Issue 和 PR！
 
-### 开发
-
-```bash
-# 安装开发依赖
-npm install
-
-# 运行开发模式
-npm run dev
-```
+---
 
 ## 📄 许可证
 
 MIT License - 详见 [LICENSE](LICENSE) 文件
 
+---
+
 ## 🙏 感谢
 
-- [OpenCode](https://opencode.ai) - 开源AI编程助手
+- [OpenCode](https://opencode.ai) - 开源 AI 编程助手
 - [Baileys](https://github.com/WhiskeySockets/Baileys) - WhatsApp Web API
 - [硅基流动](https://siliconflow.cn) - 语音转录服务
 
