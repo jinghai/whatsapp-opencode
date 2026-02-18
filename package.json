@@ -6,11 +6,11 @@
   "scripts": {
     "start": "node bridge.js",
     "dev": "node bridge.js",
+    "test": "node tests/bridge.test.js",
     "version:patch": "npm version patch --no-git-tag-version && git add package.json",
     "version:minor": "npm version minor --no-git-tag-version && git add package.json",
     "version:major": "npm version major --no-git-tag-version && git add package.json",
-    "release": "git push --tags && gh release create $(node -p \"require('./package.json').version\") --generate-notes",
-    "test": "echo \"No test specified\" && exit 1"
+    "release": "git push --tags && gh release create $(node -p \"require('./package.json').version\") --generate-notes"
   },
   "keywords": [
     "opencode",

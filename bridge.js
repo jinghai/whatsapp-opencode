@@ -245,6 +245,64 @@ async function startBridge() {
       return
     }
 
+    // Handle commands
+    const cmd = text.trim().toLowerCase()
+    
+    // /new - Create new session
+    if (cmd === '/new' || cmd === '/reset') {
+      try {
+        const newSessionRes = await axios.post(`${OPENCODE_LOCAL}/session`)
+        const newSessionId = newSessionRes.data.id
+        state.sessionId = newSessionId
+        state.lastIndex = -1
+        saveState(state)
+        await sock.sendMessage(sender, { text: `✅ 已创建新会话\n🆕 Session: ${newSessionId}` })
+        console.log(`🆕 新Session: ${newSessionId}`)
+      } catch (e) {
+        await sock.sendMessage(sender, { text: `❌ 创建失败: ${e.message}` })
+      }
+      return
+    }
+
+    // /help - Show help
+    if (cmd === '/help' || cmd === '/h') {
+      const helpMsg = `📖 *WhatsApp OpenCode Bridge v${VERSION}*
+
+🔧 *命令:*
+/new - 创建新会话
+/help - 显示帮助
+
+📱 *功能:*
+• 文本消息 - 直接发送
+• 图片消息 - 自动识别
+• 语音消息 - 自动转文字
+
+🔗 *项目:*
+github.com/jinghai/whatsapp-opencode`
+      await sock.sendMessage(sender, { text: helpMsg })
+      return
+    }
+
+    // Detect task type and add skill hints
+    let enhancedText = text
+    const skillKeywords = {
+      'brainstorming': ['想法', '设计', '规划', 'brainstorm', 'idea', 'design', 'plan', '如何实现', '方案'],
+      'debugging': ['错误', 'bug', '报错', 'debug', 'error', '问题', '不工作', '失败'],
+      'tdd': ['测试', 'test', 'tdd', '单元测试', 'spec'],
+      'code-review': ['审查', 'review', '检查代码', '优化'],
+      'git': ['提交', 'commit', 'push', 'merge', 'pr', '分支']
+    }
+    
+    // Check if task matches any skill
+    const textLower = text.toLowerCase()
+    for (const [skill, keywords] of Object.entries(skillKeywords)) {
+      if (keywords.some(kw => textLower.includes(kw))) {
+        enhancedText = `[检测到${skill}任务]\n${text}`
+        console.log(`🎯 自动检测任务类型: ${skill}`)
+        break
+      }
+    }
+
     isProcessing = true
     console.log(`\n📩 [WhatsApp] ${text.substring(0, 50)}...`)
 
@@ -252,7 +310,8 @@ async function startBridge() {
       await sock.sendPresenceUpdate('composing', sender)
       
       const parts = []
-      parts.push({ type: 'text', text: text.startsWith('📱') ? text : `📱 ${text}` })
+      const msgText = enhancedText.startsWith('📱') ? enhancedText : `📱 ${enhancedText}`
+      parts.push({ type: 'text', text: msgText })
 
       const msgResBefore = await axios.get(`${OPENCODE_LOCAL}/session/${sessionId}/message`)
       const msgCountBefore = (msgResBefore.data || []).length
