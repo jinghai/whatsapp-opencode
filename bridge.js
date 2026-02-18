@@ -6,6 +6,7 @@ const P = require('pino')
 const qrcode = require('qrcode-terminal')
 const FormData = require('form-data')
 
+const VERSION = require('./package.json').version
 const AUTH_DIR = path.join(__dirname, 'auth')
 const LOGS_DIR = path.join(__dirname, 'logs')
 const MEDIA_DIR = path.join(__dirname, 'media')
@@ -266,6 +267,7 @@ async function startBridge() {
       const maxAttempts = 600 // 10 minutes max
       const notifyInterval = 300 // Notify every 5 minutes
       let lastNotify = 0
+      let stuckCount = 0
 
       while (!reply && attempts < maxAttempts) {
         await new Promise(r => setTimeout(r, 1000))
@@ -273,34 +275,69 @@ async function startBridge() {
         const msgRes = await axios.get(`${OPENCODE_LOCAL}/session/${sessionId}/message`)
         const msgs = msgRes.data || []
         
-        // Look for ANY assistant message with text (more robust)
+        // Look for assistant messages with text
         for (let i = msgCountBefore; i < msgs.length; i++) {
           const m = msgs[i]
           if (m.info?.role === 'assistant') {
             const msgParts = m.parts || []
-            // Get text from this message
+            const finish = m.info?.finish
+            
+            // Find text in this message
+            let foundText = null
             for (const p of msgParts) {
               if (p.type === 'text' && p.text && p.text.length > 1) {
-                reply = p.text
+                foundText = p.text
                 break
               }
             }
-            // If we found a finished message with text, use it
-            if (reply && m.info?.finish === 'stop') {
-              break
-            }
-            // If we found text but not finished, continue waiting a bit more
-            if (reply && m.info?.finish !== 'stop') {
-              // Wait a bit more to see if there's more content
-              await new Promise(r => setTimeout(r, 2000))
-              // Check again
-              const msgRes2 = await axios.get(`${OPENCODE_LOCAL}/session/${sessionId}/message`)
-              const msgs2 = msgRes2.data || []
-              if (msgs2.length > i + 1) {
-                // There's a newer message, don't use this one yet
-                continue
+            
+            if (foundText) {
+              reply = foundText
+              // If finish is 'stop', we're done
+              if (finish === 'stop') {
+                break
               }
-              break
+              // If finish is None or tool-calls, check tools
+              const tools = msgParts.filter(p => p.type === 'tool')
+              const runningTools = tools.filter(p => p.state?.status === 'running')
+              
+              // If all tools done or no tools, use this reply
+              if (runningTools.length === 0) {
+                break
+              }
+              
+              // Tools still running - increment stuck counter
+              stuckCount++
+              if (stuckCount > 30) {
+                // Waited 30 seconds with running tools, use partial reply
+                console.log('⚠️ 工具仍在运行，使用部分回复')
+                break
+              }
+              // Reset reply to null to continue waiting
+              reply = null
+            } else {
+              // No text, check for stuck tools
+              const tools = msgParts.filter(p => p.type === 'tool')
+              const runningTools = tools.filter(p => p.state?.status === 'running')
+              
+              if (runningTools.length > 0) {
+                stuckCount++
+                if (stuckCount > 60) {
+                  // Stuck for 60 seconds, get tool output
+                  console.log('⚠️ 检测到卡顿，获取工具输出')
+                  for (const t of tools) {
+                    if (t.state?.status === 'completed' && t.state?.output) {
+                      const output = t.state.output
+                      if (typeof output === 'string' && output.length > 10) {
+                        reply = `📋 工具输出:\n\`\`\`\n${output.slice(0, 500)}\n\`\`\``
+                        break
+                      }
+                    }
+                  }
+                  if (reply) break
+                  stuckCount = 0
+                }
+              }
             }
           }
         }
@@ -335,7 +372,6 @@ async function startBridge() {
       // Stop typing status
       await sock.sendPresenceUpdate('paused', sender)
 
-      // Timeout or got reply
       if (reply) {
         sentToWA.add(reply)
         await sock.sendMessage(sender, { text: reply })
@@ -353,6 +389,9 @@ async function startBridge() {
           await sock.sendMessage(sender, { text: '⏱️ 处理超时，请重试。' })
         }
       }
+
+      // 任务完成后停止输入状态
+      await sock.sendPresenceUpdate('available', sender)
 
       const msgResAfter = await axios.get(`${OPENCODE_LOCAL}/session/${sessionId}/message`)
       state.lastIndex = (msgResAfter.data || []).length - 1
@@ -413,7 +452,7 @@ async function startBridge() {
   return sock
 }
 
-console.log('\n🚀 WhatsApp-OpenCode 双端同步 Bridge')
+console.log(`\n🚀 WhatsApp-OpenCode Bridge v${VERSION}`)
 console.log('📌 支持: 文本、图片识别、语音转文字')
-console.log('📌 命令: /m 切换模型\n')
+console.log('📌 项目: https://github.com/jinghai/whatsapp-opencode\n')
 startBridge().catch(e => { console.error('启动失败:', e); process.exit(1) })

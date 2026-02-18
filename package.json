@@ -1,11 +1,15 @@
 {
   "name": "whatsapp-opencode",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "通过 WhatsApp 控制 OpenCode AI 助手",
   "main": "bridge.js",
   "scripts": {
     "start": "node bridge.js",
     "dev": "node bridge.js",
+    "version:patch": "npm version patch --no-git-tag-version && git add package.json",
+    "version:minor": "npm version minor --no-git-tag-version && git add package.json",
+    "version:major": "npm version major --no-git-tag-version && git add package.json",
+    "release": "git push --tags && gh release create $(node -p \"require('./package.json').version\") --generate-notes",
     "test": "echo \"No test specified\" && exit 1"
   },
   "keywords": [
