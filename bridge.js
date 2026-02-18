@@ -102,6 +102,53 @@ function getTextFromMessage(msg) {
   return ''
 }
 
+function getProgressInfo(msgs, msgCountBefore) {
+  const lines = []
+  let currentTool = null
+  let reasoningText = ''
+  
+  // Get the latest assistant message
+  for (let i = msgs.length - 1; i >= msgCountBefore; i--) {
+    const m = msgs[i]
+    if (m.info?.role === 'assistant') {
+      const parts = m.parts || []
+      
+      // Check for reasoning/thinking
+      for (const p of parts) {
+        if (p.type === 'reasoning' && p.text) {
+          reasoningText = p.text.slice(-200) // Last 200 chars
+        }
+        if (p.type === 'tool') {
+          const status = p.state?.status
+          const toolName = p.tool || 'unknown'
+          const input = p.state?.input
+          if (status === 'running') {
+            const cmd = input?.command || input?.query || ''
+            currentTool = `• 正在执行: ${toolName}${cmd ? ` - ${cmd.slice(0, 50)}` : ''}`
+          }
+        }
+      }
+      
+      // Check step-start for plan info
+      for (const p of parts) {
+        if (p.type === 'step-start') {
+          lines.push(`📌 当前步骤: ${p.reasoning || p.id || '处理中'}`)
+        }
+      }
+    }
+  }
+  
+  if (currentTool) {
+    lines.push(currentTool)
+  }
+  
+  if (reasoningText) {
+    lines.push(`💭 ${reasoningText}`)
+  }
+  
+  return lines.length > 0 ? lines.join('\n') : null
+}
+
 async function startBridge() {
   const state = loadState()
   const sessionId = await getOrCreateSession(state)
@@ -216,38 +263,95 @@ async function startBridge() {
 
       let reply = ''
       let attempts = 0
-      const maxAttempts = 120
+      const maxAttempts = 600 // 10 minutes max
+      const notifyInterval = 300 // Notify every 5 minutes
+      let lastNotify = 0
 
-      while (attempts < maxAttempts && !reply) {
+      while (!reply && attempts < maxAttempts) {
         await new Promise(r => setTimeout(r, 1000))
         
         const msgRes = await axios.get(`${OPENCODE_LOCAL}/session/${sessionId}/message`)
         const msgs = msgRes.data || []
         
-        // Look for the final assistant message with finish === 'stop'
+        // Look for ANY assistant message with text (more robust)
         for (let i = msgCountBefore; i < msgs.length; i++) {
           const m = msgs[i]
-          if (m.info?.role === 'assistant' && m.info?.finish === 'stop') {
-            const parts = m.parts || []
-            for (const p of parts) {
+          if (m.info?.role === 'assistant') {
+            const msgParts = m.parts || []
+            // Get text from this message
+            for (const p of msgParts) {
               if (p.type === 'text' && p.text && p.text.length > 1) {
                 reply = p.text
                 break
               }
             }
-            if (reply) break
+            // If we found a finished message with text, use it
+            if (reply && m.info?.finish === 'stop') {
+              break
+            }
+            // If we found text but not finished, continue waiting a bit more
+            if (reply && m.info?.finish !== 'stop') {
+              // Wait a bit more to see if there's more content
+              await new Promise(r => setTimeout(r, 2000))
+              // Check again
+              const msgRes2 = await axios.get(`${OPENCODE_LOCAL}/session/${sessionId}/message`)
+              const msgs2 = msgRes2.data || []
+              if (msgs2.length > i + 1) {
+                // There's a newer message, don't use this one yet
+                continue
+              }
+              break
+            }
           }
         }
+        
         attempts++
+        
+        // Only show typing status after 10 seconds
+        if (attempts >= 10) {
+          if (attempts === 10) {
+            await sock.sendPresenceUpdate('composing', sender)
+          } else if (attempts % 30 === 0) {
+            await sock.sendPresenceUpdate('composing', sender)
+          }
+          
+          // Send progress update every 5 minutes
+          if (attempts - lastNotify >= notifyInterval) {
+            const elapsed = Math.floor(attempts / 60)
+            const timeStr = elapsed >= 60 ? `${Math.floor(elapsed/60)}小时${elapsed%60}分钟` : `${elapsed}分钟`
+            
+            const progressInfo = getProgressInfo(msgs, msgCountBefore)
+            const progressMsg = progressInfo 
+              ? `🔄 处理中 (${timeStr})\n\n📋 当前进度:\n${progressInfo}\n\n⏳ 对方正在输入...`
+              : `🔄 正在处理中... (已等待${timeStr})\n\n⏳ 对方正在输入...`
+            
+            await sock.sendMessage(sender, { text: progressMsg })
+            console.log(`⏳ 进度通知: ${timeStr}`)
+            lastNotify = attempts
+          }
+        }
       }
 
+      // Stop typing status
+      await sock.sendPresenceUpdate('paused', sender)
+
+      // Timeout or got reply
       if (reply) {
         sentToWA.add(reply)
         await sock.sendMessage(sender, { text: reply })
         console.log(`📤 已回复: ${reply.substring(0, 50)}...`)
       } else {
-        await sock.sendMessage(sender, { text: '⏳ 回复超时，请稍后重试' })
-        console.log(`⚠️ 回复超时`)
+        // Timeout - create new session for next request
+        console.log('⚠️ 处理超时，创建新session')
+        try {
+          const newSessionRes = await axios.post(`${OPENCODE_LOCAL}/session`)
+          state.sessionId = newSessionRes.data.id
+          state.lastIndex = -1
+          saveState(state)
+          await sock.sendMessage(sender, { text: '⏱️ 处理超时，任务可能还在继续。\n\n已创建新会话，请稍后发送新请求。' })
+        } catch (e) {
+          await sock.sendMessage(sender, { text: '⏱️ 处理超时，请重试。' })
+        }
       }
 
       const msgResAfter = await axios.get(`${OPENCODE_LOCAL}/session/${sessionId}/message`)
@@ -257,9 +361,13 @@ async function startBridge() {
     } catch (err) {
       console.error('❌ 错误:', err.message)
       try {
+        await sock.sendPresenceUpdate('paused', sender)
         await sock.sendMessage(sender, { text: `❌ 错误: ${err.message}` })
       } catch (e) {}
     } finally {
+      try {
+        await sock.sendPresenceUpdate('paused', sender)
+      } catch (e) {}
       isProcessing = false
     }
   })
