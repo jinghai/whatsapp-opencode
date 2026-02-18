@@ -1,0 +1,43 @@
+{
+  "name": "opencode-whatsapp-bridge",
+  "version": "1.0.0",
+  "description": "Bridge WhatsApp messages to OpenCode AI assistant - control your OpenCode via WhatsApp",
+  "main": "src/bridge.js",
+  "scripts": {
+    "start": "node src/bridge.js",
+    "dev": "nodemon src/bridge.js",
+    "test": "jest",
+    "lint": "eslint src/"
+  },
+  "keywords": [
+    "opencode",
+    "whatsapp",
+    "bridge",
+    "ai",
+    "assistant",
+    "baileys"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/opencode-whatsapp-bridge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/opencode-whatsapp-bridge/issues"
+  },
+  "homepage": "https://github.com/yourusername/opencode-whatsapp-bridge#readme",
+  "dependencies": {
+    "@whiskeysockets/baileys": "^7.0.0-rc.9",
+    "axios": "^1.13.5",
+    "form-data": "^4.0.0",
+    "pino": "^10.3.1",
+    "qrcode-terminal": "^0.12.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
