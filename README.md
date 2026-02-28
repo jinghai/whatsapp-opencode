@@ -19,7 +19,7 @@
 - 📱 **完整消息支持**
   - 文本消息 - 双向实时同步
   - 图片消息 - 自动保存到本地
-  - 语音消息 - ASR自动转录（硅基流动 SenseVoice）
+  - 语音消息 - ASR自动转录（由 [硅基流动](https://cloud.siliconflow.cn/i/ouQu1EpG) 提供免费支持）
 
 - 🔄 **智能处理**
   - 长任务进度通知
@@ -98,7 +98,7 @@ npm start
 2. 注册并创建 API Key
 3. 复制 Key 到 `.env` 文件
 
-> 💡 使用邀请码 `ouQu1EpG` 注册，双方均可获得免费额度
+> 🎁 **福利**：通过 [我的邀请链接](https://cloud.siliconflow.cn/i/ouQu1EpG) 注册，你我都能获得免费额度（RPM/TPM 更高，体验更好）！
 
 ---
 
@@ -253,7 +253,7 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
 
 - [OpenCode](https://opencode.ai) - 开源 AI 编程助手
 - [Baileys](https://github.com/WhiskeySockets/Baileys) - WhatsApp Web API
-- [硅基流动](https://siliconflow.cn) - 语音转录服务
+- [硅基流动](https://cloud.siliconflow.cn/i/ouQu1EpG) - 免费语音转录服务
 
 ---
 
