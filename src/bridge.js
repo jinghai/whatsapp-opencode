@@ -14,7 +14,7 @@ const STATE_FILE = path.join(DATA_DIR, 'state.json')
 
 const OPENCODE_LOCAL = 'http://127.0.0.1:4096'
 const SILICONFLOW_API = 'https://api.siliconflow.cn/v1/audio/transcriptions'
-const SILICONFLOW_KEY = 'sk-qlpzpxwgnpnclihjlhwvqhkxiknsblugeshuasdvcrwcjdec'
+const SILICONFLOW_KEY = 'sk-demo'
 
 ;[AUTH_DIR, LOGS_DIR, MEDIA_DIR, DATA_DIR].forEach(d => {
   if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true })
