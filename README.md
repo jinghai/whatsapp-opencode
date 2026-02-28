@@ -94,9 +94,11 @@ npm start
 
 ### 获取 SiliconFlow API Key
 
-1. 访问 [硅基流动](https://siliconflow.cn)
+1. 访问 [硅基流动](https://cloud.siliconflow.cn/i/ouQu1EpG) （或 [官网](https://siliconflow.cn)）
 2. 注册并创建 API Key
 3. 复制 Key 到 `.env` 文件
+
+> 💡 使用邀请码 `ouQu1EpG` 注册，双方均可获得免费额度
 
 ---
 
