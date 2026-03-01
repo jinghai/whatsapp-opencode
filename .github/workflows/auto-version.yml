@@ -1,0 +1,47 @@
+name: Auto Version Bump
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: "manual override: major/minor/patch/auto"
+        required: false
+        default: "auto"
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+
+      - name: Determine bump type
+        id: bump
+        run: |
+          MODE="${{ github.event.inputs.bump_type || 'auto' }}"
+          BUMP=$(node scripts/determine-version-bump.js "$MODE")
+          echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
+          echo "Detected bump type: $BUMP"
+
+      - name: Apply version bump
+        if: steps.bump.outputs.bump != 'none'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          npm version "${{ steps.bump.outputs.bump }}" --no-git-tag-version
+          VERSION=$(node -p "require('./package.json').version")
+          git add package.json package-lock.json
+          git commit -m "chore(release): v$VERSION"
+          git tag "v$VERSION"
+          git push origin HEAD:main
+          git push origin "v$VERSION"

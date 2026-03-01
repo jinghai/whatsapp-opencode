@@ -89,9 +89,7 @@ function validateAllowlistInput(input) {
     .split(',')
     .map(item => item.trim())
     .filter(Boolean);
-  if (items.length === 0) {
-    return t('allowlistRequired');
-  }
+  if (items.length === 0) return true;
   const invalid = items.find(item => !/^\+?\d{6,15}$/.test(item));
   if (invalid) {
     return t('allowlistInvalid', { value: invalid });
@@ -192,12 +190,12 @@ async function setupConfig() {
       if (key && value) currentConfig[key.trim()] = value.trim();
     });
     
-    // If config seems valid, ask if user wants to reconfigure
-    if (currentConfig.OPENCODE_URL && currentConfig.SILICONFLOW_KEY && currentConfig.ALLOWLIST) {
+    // If core config exists, reuse it directly.
+    if (currentConfig.OPENCODE_URL) {
       console.log(chalk.green(t('configFound')));
       return {
         opencodeUrl: currentConfig.OPENCODE_URL,
-        siliconflowKey: currentConfig.SILICONFLOW_KEY,
+        siliconflowKey: currentConfig.SILICONFLOW_KEY || '',
         allowlist: (currentConfig.ALLOWLIST || '').split(',').map(s => s.trim())
       };
     }
@@ -239,7 +237,12 @@ async function setupConfig() {
       name: 'siliconflowKey',
       message: t('enterSiliconKey'),
       default: currentConfig.SILICONFLOW_KEY,
-      validate: input => input ? true : 'API Key is required'
+      validate: input => {
+        if (answers1.hasSiliconKey) {
+          return input ? true : 'API Key is required';
+        }
+        return true;
+      }
     },
     {
       type: 'input',
@@ -254,8 +257,9 @@ async function setupConfig() {
 
   const newEnvContent = Object.entries({
     OPENCODE_URL: answers.opencodeUrl,
-    SILICONFLOW_KEY: answers.siliconflowKey,
+    SILICONFLOW_KEY: answers1.hasSiliconKey ? answers.siliconflowKey : '',
     ALLOWLIST: answers.allowlist,
+    OPENCODE_IMAGE_CAPABILITY: currentConfig.OPENCODE_IMAGE_CAPABILITY || 'auto',
     WORKING_DIR: currentConfig.WORKING_DIR || process.cwd(),
     DEBUG: currentConfig.DEBUG || 'false'
   }).map(([k, v]) => `${k}=${v}`).join('\n');

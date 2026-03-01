@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-opencode",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "bin": {
     "wao": "./bin/wao.js"
   },
@@ -16,8 +16,18 @@
     "version:patch": "npm version patch --no-git-tag-version && git add package.json",
     "version:minor": "npm version minor --no-git-tag-version && git add package.json",
     "version:major": "npm version major --no-git-tag-version && git add package.json",
-    "release": "git push --tags && gh release create $(node -p \"require('./package.json').version\") --generate-notes"
+    "release": "git push --tags && gh release create v$(node -p \"require('./package.json').version\") --generate-notes",
+    "prepublishOnly": "npm run lint && npm run test:coverage"
   },
+  "files": [
+    "bin/",
+    "src/",
+    "scripts/",
+    "README.md",
+    "LICENSE",
+    "RELEASE_NOTES.md",
+    ".env.example"
+  ],
   "keywords": [
     "opencode",
     "whatsapp",

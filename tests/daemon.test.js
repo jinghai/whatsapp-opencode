@@ -34,6 +34,16 @@ describe('Daemon Manager', () => {
     expect(callArgs.cwd).toBe(process.cwd());
   });
 
+  test('start should skip interactive setup in daemon mode', async () => {
+    pm2.connect.mockImplementation((cb) => cb(null));
+    pm2.start.mockImplementation((opts, cb) => cb(null, []));
+    pm2.disconnect.mockImplementation(() => {});
+
+    await start();
+    const callArgs = pm2.start.mock.calls[0][0];
+    expect(callArgs.env).toMatchObject({ SKIP_SETUP: 'true' });
+  });
+
   test('stop should call pm2.stop', async () => {
     pm2.connect.mockImplementation((cb) => cb(null));
     pm2.stop.mockImplementation((name, cb) => cb(null));
