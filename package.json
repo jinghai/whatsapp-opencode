@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-opencode",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "bin": {
     "wao": "./bin/wao.js"
   },
