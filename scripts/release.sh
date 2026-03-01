@@ -1,66 +1,53 @@
 #!/bin/bash
-
-# 发布脚本
-# Usage: ./scripts/release.sh [auto|patch|minor|major]
-
 set -e
 
-INPUT_TYPE=${1:-auto}
+# Default bump type
+BUMP_TYPE=${1:-patch}
 
-echo "🚀 发布 OpenCode WhatsApp Bridge"
-echo "输入版本类型: $INPUT_TYPE"
+echo "🚀 Starting release process ($BUMP_TYPE)..."
 
-if [ "$INPUT_TYPE" = "auto" ]; then
-    VERSION_TYPE=$(node scripts/determine-version-bump.js auto)
-else
-    VERSION_TYPE=$INPUT_TYPE
+# Ensure working directory is clean
+if [[ -n $(git status -s) ]]; then
+  echo "❌ Error: Working directory is not clean. Please commit or stash changes."
+  exit 1
 fi
 
-if [ "$VERSION_TYPE" = "none" ]; then
-    echo "ℹ️  没有检测到 feat/fix 变更，不发布新版本"
-    exit 0
-fi
-
-echo "最终版本类型: $VERSION_TYPE"
-
-# 检查工作目录是否干净
-if [ -n "$(git status --porcelain)" ]; then
-    echo "❌ 工作目录不干净，请先提交或暂存更改"
-    git status
-    exit 1
-fi
-
-# 拉取最新代码
-echo "📥 拉取最新代码..."
-git checkout main
-git pull origin main
-
-# 运行完整测试
-echo "🧪 运行测试..."
-npm run lint
+# 1. Run tests
+echo "🧪 Running tests..."
 npm run test:coverage
 
-# 更新版本
-echo "📦 更新版本..."
-npm version "$VERSION_TYPE" --no-git-tag-version
-git add package.json package-lock.json
-NEW_VERSION=$(node -p "require('./package.json').version")
-git commit -m "chore(release): v$NEW_VERSION"
-git tag "v$NEW_VERSION"
+# 2. Bump version
+echo "📦 Bumping version..."
+npm version $BUMP_TYPE --no-git-tag-version
 
-# 获取新版本号
-echo "✅ 新版本: v$NEW_VERSION"
+# Get new version
+VERSION=$(node -p "require('./package.json').version")
+echo "New version: $VERSION"
 
-# 推送代码和标签
-echo "⬆️  推送到 GitHub..."
+# 3. Generate changelog (simple git log since last tag)
+LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+echo "📝 Generating release notes..."
+echo "# Release v$VERSION" > RELEASE_NOTES.md
+echo "" >> RELEASE_NOTES.md
+if [ -z "$LAST_TAG" ]; then
+  git log --pretty=format:"- %s (%h)" >> RELEASE_NOTES.md
+else
+  git log ${LAST_TAG}..HEAD --pretty=format:"- %s (%h)" >> RELEASE_NOTES.md
+fi
+
+# 4. Commit and Tag
+echo "💾 Committing changes..."
+git add package.json RELEASE_NOTES.md
+git commit -m "chore(release): v$VERSION"
+git tag -a "v$VERSION" -m "Release v$VERSION"
+
+# 5. Push
+echo "⬆️ Pushing to remote..."
 git push origin main
-git push origin "v$NEW_VERSION"
+git push origin "v$VERSION"
 
-echo "🎉 发布完成！"
-echo ""
-echo "GitHub Actions 将自动："
-echo "  1. 运行 CI/CD 测试"
-echo "  2. 创建 Release"
-echo "  3. 发布到 NPM（如果配置了）"
-echo ""
-echo "查看发布状态：https://github.com/jinghai/whatsapp-opencode/actions"
+# 6. Publish to npm
+echo "📢 Publishing to npm..."
+npm publish
+
+echo "✅ Release v$VERSION completed successfully!"

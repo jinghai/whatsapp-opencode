@@ -66,8 +66,12 @@ function clearAuthState(authDir) {
 
 function normalizeJid(value) {
   if (!value) return null;
-  if (value.includes('@')) return value;
-  const digits = value.replace(/[^\d]/g, '');
+  let base = value;
+  if (value.includes('@')) {
+    const [user] = value.split('@');
+    base = user.split(':')[0];
+  }
+  const digits = base.replace(/[^\d]/g, '');
   if (!digits) return null;
   const normalized = digits.length === 11 && digits.startsWith('1') ? `86${digits}` : digits;
   return `${normalized}@s.whatsapp.net`;
@@ -215,14 +219,14 @@ async function startBridge(config, version, options = {}) {
         if (statusCode === DisconnectReason.loggedOut) {
           clearAuthState(authDir);
           console.log(t('loggedOutRescan'));
-          startBridge(config, version).catch(err => logger.error({ err }, 'Restart failed'));
+          startBridge(config, version, options).catch(err => logger.error({ err }, 'Restart failed'));
           return;
         }
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
         if (shouldReconnect) {
           console.log(t('reconnecting'));
           // Restart bridge
-          startBridge(config, version).catch(err => logger.error({ err }, 'Restart failed'));
+          startBridge(config, version, options).catch(err => logger.error({ err }, 'Restart failed'));
         }
       } else if (connection === 'open') {
         logger.info('WhatsApp 连接成功');
@@ -268,13 +272,37 @@ async function startBridge(config, version, options = {}) {
       if (!msg?.message) return;
 
       const sender = msg.key.remoteJid;
-      if (!myJid && msg.key.fromMe && sender) {
-        myJid = sender;
+      
+      // 规范化 JID 用于比较（忽略设备后缀）
+      const normalizedSender = normalizeJid(sender);
+      
+      if (!myJid && msg.key.fromMe && normalizedSender) {
+        myJid = normalizedSender;
+        logger.info({ myJid }, 'set myJid from first self message');
       }
 
-      const isMessageToSelf = msg.key.fromMe && sender && myJid && sender === myJid;
-      if (msg.key.fromMe && !isMessageToSelf) return;
-      if (!msg.key.fromMe && !isSenderAllowed(sender, config.allowlist)) return;
+      const normalizedMyJid = normalizeJid(myJid);
+      const isMessageToSelf = msg.key.fromMe && normalizedSender && normalizedMyJid && normalizedSender === normalizedMyJid;
+
+      logger.info({ 
+        msgId: msg.key.id,
+        fromMe: msg.key.fromMe,
+        sender,
+        normalizedSender,
+        myJid,
+        isMessageToSelf,
+        text: getTextFromMessage(msg)?.slice(0, 20)
+      }, 'wa message processing check');
+
+      if (msg.key.fromMe && !isMessageToSelf) {
+        logger.info({ sender, myJid }, 'ignored fromMe message to others');
+        return;
+      }
+      
+      if (!msg.key.fromMe && !isSenderAllowed(sender, config.allowlist)) {
+        logger.warn({ sender, allowlist: config.allowlist }, 'message ignored by allowlist');
+        return;
+      }
 
       // Check per-user processing state
       if (!state.processingUsers) state.processingUsers = new Set();
@@ -317,7 +345,10 @@ async function startBridge(config, version, options = {}) {
         }
       }
 
-      if (!text && !imageContext) return;
+      if (!text && !imageContext) {
+        logger.info({ sender }, 'empty message content');
+        return;
+      }
       if (sentToWA.has(text)) {
         sentToWA.delete(text);
         return;

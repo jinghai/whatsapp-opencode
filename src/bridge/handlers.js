@@ -56,9 +56,20 @@ function buildHelpMessage(version) {
 github.com/jinghai/whatsapp-opencode`;
 }
 
+/**
+ * 规范化电话号码（用于白名单匹配）
+ * - 去除 JID 中的域名与设备后缀（如 ":8"）
+ * - 仅保留数字字符
+ * - 将 11 位以 1 开头的本地手机号归一化为中国区号前缀（86）
+ */
 function normalizePhoneNumber(value) {
   if (!value) return '';
-  const digits = String(value).replace(/[^\d]/g, '');
+  let raw = String(value);
+  // 去除 JID 域名部分
+  raw = raw.split('@')[0];
+  // 去除 WhatsApp 多设备标识（如 :8）
+  raw = raw.split(':')[0];
+  const digits = raw.replace(/[^\d]/g, '');
   if (!digits) return '';
   if (digits.length === 11 && digits.startsWith('1')) {
     return `86${digits}`;

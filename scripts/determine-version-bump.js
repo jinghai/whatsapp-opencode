@@ -19,6 +19,18 @@ function detectBumpFromCommits() {
   const raw = safeSh(`git log --pretty=%s ${range}`);
   if (!raw) return 'none';
 
+  // If version files changed in this range, assume release version was already
+  // explicitly managed and skip auto-bump to avoid double-increment.
+  if (lastTag) {
+    const changedFiles = safeSh(`git diff --name-only ${range}`)
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean);
+    if (changedFiles.includes('package.json') || changedFiles.includes('package-lock.json')) {
+      return 'none';
+    }
+  }
+
   const subjects = raw.split('\n').map(line => line.trim()).filter(Boolean);
   const hasFeat = subjects.some(subject => /^feat(\(.+\))?:/i.test(subject));
   const hasFix = subjects.some(subject => /^fix(\(.+\))?:/i.test(subject));

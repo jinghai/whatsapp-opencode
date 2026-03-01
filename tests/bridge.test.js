@@ -115,6 +115,10 @@ describe('白名单校验', () => {
   test('白名单带 + 号也能匹配发送者', () => {
     expect(isSenderAllowed('8615800937529@s.whatsapp.net', ['+8615800937529'])).toBe(true);
   });
+
+  test('JID 带设备后缀 :8 也能匹配', () => {
+    expect(isSenderAllowed('8615800937529:8@s.whatsapp.net', ['+8615800937529'])).toBe(true);
+  });
 });
 
 describe('消息辅助', () => {

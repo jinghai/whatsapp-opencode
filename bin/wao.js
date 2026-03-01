@@ -7,6 +7,7 @@ const stopCommand = require('../src/cli/commands/stop');
 const statusCommand = require('../src/cli/commands/status');
 const logsCommand = require('../src/cli/commands/logs');
 const configCommand = require('../src/cli/commands/config');
+const upgradeCommand = require('../src/cli/commands/upgrade');
 
 program
   .name('wao')
@@ -42,5 +43,10 @@ program
   .command('config')
   .description('Show current configuration')
   .action(configCommand);
+
+program
+  .command('upgrade')
+  .description('Upgrade to latest version')
+  .action(upgradeCommand);
 
 program.parse(process.argv);
