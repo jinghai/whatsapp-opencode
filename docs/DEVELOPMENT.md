@@ -61,7 +61,7 @@ npm test
 # 运行lint检查
 npm run lint
 
-# 本地运行测试
+# 本地运行服务
 npm run dev
 ```
 
@@ -159,7 +159,7 @@ docker run -v $(pwd):/app -p 3000:3000 opencode-whatsapp-bridge:dev
 
 ```bash
 # 开发模式（自动重启）
-pm run dev
+pm2 start src/index.js --name whatsapp-opencode
 
 # 生产模式
 npm start
