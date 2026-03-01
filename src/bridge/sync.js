@@ -7,6 +7,7 @@ const { ensureDir, readJson, writeJson } = require('../utils/filesystem');
 const { isUserMessage, isAssistantMessage, getTextFromMessage, buildProgressMessage } = require('../utils/messages');
 const { createOpenCodeClient } = require('../services/opencodeClient');
 const { transcribeAudio } = require('../services/transcriber');
+const { transcribeImage } = require('../services/ocr');
 const { createWhatsAppClient } = require('../services/whatsappClient');
 const { parseCommand, enrichTextWithSkillHint, buildHelpMessage, isSenderAllowed } = require('./handlers');
 const { createLogger } = require('../utils/logger');
@@ -29,14 +30,20 @@ function resolveDirs(workingDir) {
  * 读取运行状态
  */
 function loadState(stateFile) {
-  return readJson(stateFile, { users: {} });
+  const state = readJson(stateFile, { users: {} }) || {};
+  return {
+    users: state.users && typeof state.users === 'object' ? state.users : {}
+  };
 }
 
 /**
  * 写入运行状态
  */
 function saveState(stateFile, state) {
-  writeJson(stateFile, state);
+  const persisted = {
+    users: state?.users && typeof state.users === 'object' ? state.users : {}
+  };
+  writeJson(stateFile, persisted);
 }
 
 function validateConfig(config) {
@@ -72,6 +79,36 @@ function resolveGreetingTargets(allowlist, sock) {
   }
   const selfJid = sock?.user?.id;
   return selfJid ? [selfJid] : [];
+}
+
+function normalizeImageMimeType(imageMessage) {
+  const mimeType = String(imageMessage?.mimetype || '').trim().toLowerCase();
+  return mimeType || 'image/jpeg';
+}
+
+function buildTextPromptPart(text) {
+  const enhancedText = enrichTextWithSkillHint(text);
+  return [{ type: 'text', text: enhancedText.startsWith('📱') ? enhancedText : `📱 ${enhancedText}` }];
+}
+
+function buildImagePromptParts(promptText, dataUrl) {
+  return [
+    ...buildTextPromptPart(promptText),
+    { type: 'image', image: { data_url: dataUrl } }
+  ];
+}
+
+function shouldFallbackToOcr(error) {
+  const statusCode = error?.response?.status;
+  if ([400, 404, 415, 422, 501].includes(statusCode)) {
+    return true;
+  }
+  const msg = String(error?.message || '').toLowerCase();
+  return msg.includes('unsupported') || msg.includes('image') || msg.includes('invalid part');
+}
+
+function toDataUrl(buffer, mimeType) {
+  return `data:${mimeType};base64,${Buffer.from(buffer).toString('base64')}`;
 }
 
 /**
@@ -128,6 +165,7 @@ async function startBridge(config, version, options = {}) {
   const logger = createLogger(config.workingDir, config.debug);
   const client = createOpenCodeClient(config.opencodeUrl);
   const state = loadState(stateFile);
+  state.processingUsers = new Set();
   // const sessionId = await getOrCreateSession(client, state);
   // state.sessionId = sessionId;
   // const initialMessages = await client.listMessages(sessionId);
@@ -243,6 +281,7 @@ async function startBridge(config, version, options = {}) {
       if (state.processingUsers.has(sender)) return;
 
       let text = '';
+      let imageContext = null;
 
       if (msg.message.conversation) {
         text = msg.message.conversation;
@@ -251,10 +290,17 @@ async function startBridge(config, version, options = {}) {
       } else if (msg.message.imageMessage) {
         const buffer = await downloadMediaToBuffer(sock, msg);
         if (buffer) {
+          const mimeType = normalizeImageMimeType(msg.message.imageMessage);
           const filename = `img_${Date.now()}.jpg`;
           const filepath = path.join(mediaDir, filename);
           fs.writeFileSync(filepath, buffer);
-          text = `${msg.message.imageMessage.caption || '请描述这张图片'}\n\n[图片路径: ${filepath}]`;
+          imageContext = {
+            buffer,
+            mimeType,
+            caption: msg.message.imageMessage.caption || '请识别图片中的内容',
+            filepath
+          };
+          text = msg.message.imageMessage.caption || '请识别图片中的内容';
         } else {
           text = '[图片下载失败]';
         }
@@ -271,7 +317,7 @@ async function startBridge(config, version, options = {}) {
         }
       }
 
-      if (!text) return;
+      if (!text && !imageContext) return;
       if (sentToWA.has(text)) {
         sentToWA.delete(text);
         return;
@@ -306,13 +352,40 @@ async function startBridge(config, version, options = {}) {
       state.processingUsers.add(sender);
       try {
         await sock.sendPresenceUpdate('composing', sender);
-        const enhancedText = enrichTextWithSkillHint(text);
-        const parts = [{ type: 'text', text: enhancedText.startsWith('📱') ? enhancedText : `📱 ${enhancedText}` }];
+        let parts = buildTextPromptPart(text);
+        const imageCapability = config.imageCapability || 'auto';
+        if (imageContext) {
+          if (imageCapability === 'ocr') {
+            const ocrText = await transcribeImage({
+              buffer: imageContext.buffer,
+              apiKey: config.siliconflowKey,
+              mimeType: imageContext.mimeType
+            });
+            parts = buildTextPromptPart(`${imageContext.caption}\n\n[OCR 文本]\n${ocrText}`);
+          } else {
+            const dataUrl = toDataUrl(imageContext.buffer, imageContext.mimeType);
+            parts = buildImagePromptParts(imageContext.caption, dataUrl);
+          }
+        }
         
         // Use user's sessionId
         const currentSessionId = state.users[sender].sessionId;
         const msgCountBefore = (await client.listMessages(currentSessionId)).length;
-        await client.sendPromptAsync(currentSessionId, parts);
+        try {
+          await client.sendPromptAsync(currentSessionId, parts);
+        } catch (error) {
+          const imageCapability = config.imageCapability || 'auto';
+          if (!imageContext || imageCapability !== 'auto' || !shouldFallbackToOcr(error)) {
+            throw error;
+          }
+          const ocrText = await transcribeImage({
+            buffer: imageContext.buffer,
+            apiKey: config.siliconflowKey,
+            mimeType: imageContext.mimeType
+          });
+          const fallbackParts = buildTextPromptPart(`${imageContext.caption}\n\n[OCR 文本]\n${ocrText}`);
+          await client.sendPromptAsync(currentSessionId, fallbackParts);
+        }
 
         let reply = '';
         let attempts = 0;

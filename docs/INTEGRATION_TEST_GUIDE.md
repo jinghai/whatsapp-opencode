@@ -1,64 +1,35 @@
-# 手动集成测试指南
+# Integration Test Guide
 
-由于 WhatsApp 登录需要扫描二维码，我们无法在 CI/CD 中完全自动化此过程。发布新版本前，请务必在本地执行此测试清单。
+由于 WhatsApp 登录依赖扫码，本项目集成测试需人工执行。
 
-## 🛠️ 环境准备
+## 前置条件
 
-1.  确保本地已安装 Node.js 18+。
-2.  准备一部已登录 WhatsApp 的手机。
-3.  准备一个用于测试的 OpenCode 模拟服务（或真实服务）。
+- 已安装 Node.js 18+
+- 已配置 `.env`
+- 手机已登录 WhatsApp
+- OpenCode 服务可访问
 
-## 🧪 测试清单
+## 测试步骤
 
-### 1. 纯净安装测试
+1. 启动服务：
 
 ```bash
-# 在项目根目录
-npm link
-# 验证命令是否可用
-wao --help
+wao setup
+wao start
 ```
 
-- [ ] `wao --help` 显示正确帮助信息。
-- [ ] `wao setup` 启动向导。
+2. 在 WhatsApp 端验证：
 
-### 2. 配置与启动
+- 文本消息可正常往返
+- `/new` 可创建新会话
+- 语音消息可转文字（配置 `SILICONFLOW_KEY` 时）
+- 图片消息流程：
+  - `direct` 模式：直接由 OpenCode 处理图片
+  - `ocr` 模式：先 OCR，再把识别文字发给 OpenCode
+  - `auto` 模式：直传失败时应回退到 OCR
+- 需要审批的工具调用会收到提醒消息
 
-运行 `wao setup` 并完成配置：
-- [ ] 检测 OpenCode 安装（如未安装提示安装）。
-- [ ] 输入 SiliconFlow Key（选填）。
-- [ ] 生成配置文件 `.env`。
-
-运行 `wao start`：
-- [ ] 终端显示二维码。
-- [ ] 手机扫描成功登录。
-- [ ] 终端显示 "Client is ready!"。
-
-### 3. 核心功能验证 (WhatsApp 端操作)
-
-**测试 1: 基础对话**
-- 发送: `ping`
-- 预期: 收到 OpenCode 回复（取决于后端逻辑，或者简单的 "pong" 如果配置了）。
-
-**测试 2: 新会话**
-- 发送: `/new`
-- 预期: 回复 "New session started" 或类似提示，上下文被重置。
-
-**测试 3: 语音转录 (需配置 SiliconFlow Key)**
-- 发送: 一条语音消息
-- 预期: 收到 "正在转录..." -> 收到转录后的文本 -> 收到 OpenCode 对该文本的回复。
-
-**测试 4: 图片分析**
-- 发送: 一张图片
-- 预期: 收到 "Image received" -> 收到 OpenCode 对图片的分析结果。
-
-**测试 5: 权限确认**
-- 触发一个需要权限的操作（如果 OpenCode 有此功能，例如删除文件）。
-- 预期: WhatsApp 收到 "Request permission..."。
-- 回复: `yes`
-- 预期: 操作继续执行。
-
-### 4. 服务管理
+3. 运维命令：
 
 ```bash
 wao status
@@ -66,10 +37,9 @@ wao logs
 wao stop
 ```
 
-- [ ] `wao status` 显示 `online`。
-- [ ] `wao logs` 能看到刚才的消息日志。
-- [ ] `wao stop` 成功停止服务，`wao status` 显示 `stopped` 或无服务。
+## 通过标准
 
-## ✅ 验证完成
-
-如果以上步骤全部通过，你可以放心地打 Tag 并发布了！
+- CLI 命令行为符合预期
+- 消息双向同步稳定
+- 图片与语音处理符合配置策略
+- 日志可追踪，无未处理异常

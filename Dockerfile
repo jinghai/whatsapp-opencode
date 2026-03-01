@@ -5,7 +5,7 @@ WORKDIR /app
 
 # 安装依赖
 COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
+RUN npm ci --omit=dev && npm cache clean --force
 
 # 复制代码
 COPY . .
@@ -21,10 +21,12 @@ USER bridge
 
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:3000/health', (r) => r.statusCode === 200 ? process.exit(0) : process.exit(1))"
+ENV SKIP_SETUP=true
 
-CMD ["node", "src/bridge.js"]
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD node -e "try { process.kill(1, 0); process.exit(0); } catch (e) { process.exit(1); }"
+
+CMD ["node", "src/index.js"]
 
 # 开发环境
 FROM node:18-alpine AS development
@@ -33,7 +35,7 @@ WORKDIR /app
 
 # 安装所有依赖（包括devDependencies）
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 
 # 复制代码
 COPY . .
@@ -42,5 +44,7 @@ COPY . .
 RUN mkdir -p auth logs media data
 
 EXPOSE 3000
+
+ENV SKIP_SETUP=true
 
 CMD ["npm", "run", "dev"]

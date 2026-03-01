@@ -188,28 +188,14 @@ describe('Setup Wizard', () => {
     );
   });
 
-  test('已有配置但缺少白名单时应继续提示输入', async () => {
+  test('已有配置即使缺少白名单也应跳过重复配置', async () => {
     fs.existsSync.mockReturnValue(true);
     fs.readFileSync.mockReturnValue('OPENCODE_URL=http://localhost:3000\nSILICONFLOW_KEY=key\nALLOWLIST=');
-    exec.mockImplementation((cmd, cb) => cb(null, 'ok'));
-
     inquirer.prompt.mockResolvedValueOnce({ lang: 'en' });
-    inquirer.prompt.mockResolvedValueOnce({ 
-      opencodeUrl: 'http://localhost:3000',
-      hasSiliconKey: true
-    });
-    inquirer.prompt.mockResolvedValueOnce({ 
-      siliconflowKey: 'key',
-      allowlist: '+8615800937529'
-    });
 
     await runSetup();
 
-    const hasAllowlistPrompt = inquirer.prompt.mock.calls.some(call => {
-      const group = call[0];
-      return Array.isArray(group) && group.some(item => item.name === 'allowlist');
-    });
-    expect(hasAllowlistPrompt).toBe(true);
+    expect(inquirer.prompt).toHaveBeenCalledTimes(1);
   });
 
   test('白名单输入应校验国际号码格式', async () => {

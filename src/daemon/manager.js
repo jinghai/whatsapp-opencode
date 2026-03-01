@@ -19,7 +19,11 @@ async function start() {
     pm2.start({
       name: APP_NAME,
       script: SCRIPT_PATH,
-      cwd: process.cwd()
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        SKIP_SETUP: 'true'
+      }
       // Add other pm2 options here if needed
     }, (err, apps) => {
       pm2.disconnect();

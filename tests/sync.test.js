@@ -44,12 +44,17 @@ jest.mock('../src/services/transcriber', () => ({
   transcribeAudio: jest.fn()
 }));
 
+jest.mock('../src/services/ocr', () => ({
+  transcribeImage: jest.fn()
+}));
+
 const { startBridge } = require('../src/bridge/sync');
 const { createOpenCodeClient } = require('../src/services/opencodeClient');
 const { createWhatsAppClient } = require('../src/services/whatsappClient');
 const { readJson } = require('../src/utils/filesystem');
 const { downloadMediaMessage } = require('@whiskeysockets/baileys');
 const { transcribeAudio } = require('../src/services/transcriber');
+const { transcribeImage } = require('../src/services/ocr');
 const P = require('pino');
 const fs = require('fs');
 
@@ -470,11 +475,12 @@ describe('sync', () => {
     );
   });
 
-  test('收到图片消息应下载并转发描述', async () => {
+  test('图片模式为 ocr 时应转文字再发送给 OpenCode', async () => {
     const config = {
       workingDir: '/tmp/wa-bridge',
       opencodeUrl: 'http://localhost:3000',
       siliconflowKey: 'sk-test',
+      imageCapability: 'ocr',
       debug: false,
       allowlist: []
     };
@@ -493,6 +499,8 @@ describe('sync', () => {
     const mockBuffer = Buffer.from('fake-image');
     downloadMediaMessage.mockResolvedValue(mockBuffer);
     
+    transcribeImage.mockResolvedValue('这是图片里的文字');
+
     mockOpenCodeClient.listMessages.mockReset();
     mockOpenCodeClient.listMessages
       .mockResolvedValueOnce([]) // msgCountBefore
@@ -518,22 +526,133 @@ describe('sync', () => {
       }]
     });
 
-    // 验证下载和保存
     expect(downloadMediaMessage).toHaveBeenCalled();
-    expect(fs.writeFileSync).toHaveBeenCalledWith(
-      expect.stringMatching(/img_\d+\.jpg$/),
-      mockBuffer
-    );
+    expect(transcribeImage).toHaveBeenCalledWith(expect.objectContaining({
+      buffer: mockBuffer,
+      apiKey: 'sk-test'
+    }));
 
-    // 验证发送给 OpenCode 的内容包含路径
     expect(mockOpenCodeClient.sendPromptAsync).toHaveBeenCalledWith(
       expect.anything(),
       expect.arrayContaining([
-        expect.objectContaining({ 
-          text: expect.stringContaining('[图片路径:') 
+        expect.objectContaining({
+          type: 'text',
+          text: expect.stringContaining('这是图片里的文字')
         })
       ])
     );
+  });
+
+  test('图片模式为 direct 时应直接发送图片给 OpenCode', async () => {
+    const config = {
+      workingDir: '/tmp/wa-bridge',
+      opencodeUrl: 'http://localhost:3000',
+      siliconflowKey: 'sk-test',
+      imageCapability: 'direct',
+      debug: false,
+      allowlist: []
+    };
+
+    readJson.mockReturnValue({});
+    jest.useRealTimers();
+
+    const { stop } = await startBridge(config, '1.0.0');
+    stop();
+
+    const connectCall = createWhatsAppClient.mock.calls[0][0];
+    const onMessagesUpsert = connectCall.onMessagesUpsert;
+    const sender = '123@s.whatsapp.net';
+
+    const mockBuffer = Buffer.from('fake-image');
+    downloadMediaMessage.mockResolvedValue(mockBuffer);
+
+    mockOpenCodeClient.listMessages.mockReset();
+    mockOpenCodeClient.listMessages
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          info: { role: 'assistant', finish: 'stop' },
+          parts: [{ type: 'text', text: '收到图片了' }]
+        }
+      ]);
+    mockOpenCodeClient.sendPromptAsync.mockResolvedValue({});
+
+    await onMessagesUpsert({
+      messages: [{
+        key: { remoteJid: sender, fromMe: false },
+        message: {
+          imageMessage: { caption: '测试图片' }
+        }
+      }]
+    });
+
+    expect(transcribeImage).not.toHaveBeenCalled();
+    expect(mockOpenCodeClient.sendPromptAsync).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'image' })
+      ])
+    );
+  });
+
+  test('图片模式为 auto 且直传失败时应回退 OCR', async () => {
+    const config = {
+      workingDir: '/tmp/wa-bridge',
+      opencodeUrl: 'http://localhost:3000',
+      siliconflowKey: 'sk-test',
+      imageCapability: 'auto',
+      debug: false,
+      allowlist: []
+    };
+
+    readJson.mockReturnValue({});
+    jest.useRealTimers();
+
+    const { stop } = await startBridge(config, '1.0.0');
+    stop();
+
+    const connectCall = createWhatsAppClient.mock.calls[0][0];
+    const onMessagesUpsert = connectCall.onMessagesUpsert;
+    const sender = '123@s.whatsapp.net';
+
+    const mockBuffer = Buffer.from('fake-image');
+    downloadMediaMessage.mockResolvedValue(mockBuffer);
+    transcribeImage.mockResolvedValue('OCR 回退文字');
+
+    mockOpenCodeClient.listMessages.mockReset();
+    mockOpenCodeClient.listMessages
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          info: { role: 'assistant', finish: 'stop' },
+          parts: [{ type: 'text', text: '收到回退文字' }]
+        }
+      ]);
+    mockOpenCodeClient.sendPromptAsync
+      .mockRejectedValueOnce(new Error('unsupported image part'))
+      .mockResolvedValueOnce({});
+
+    await onMessagesUpsert({
+      messages: [{
+        key: { remoteJid: sender, fromMe: false },
+        message: {
+          imageMessage: { caption: '测试图片' }
+        }
+      }]
+    });
+
+    expect(mockOpenCodeClient.sendPromptAsync).toHaveBeenCalledTimes(2);
+    expect(transcribeImage).toHaveBeenCalledWith(expect.objectContaining({
+      buffer: mockBuffer,
+      apiKey: 'sk-test'
+    }));
+    const fallbackCall = mockOpenCodeClient.sendPromptAsync.mock.calls[1][1];
+    expect(fallbackCall).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'text',
+        text: expect.stringContaining('OCR 回退文字')
+      })
+    ]));
   });
 
   test('收到语音消息应转录并转发内容', async () => {
@@ -776,6 +895,58 @@ describe('sync', () => {
 
     expect(savedState.users['active@s.whatsapp.net']).toBeDefined();
     expect(savedState.users['expired@s.whatsapp.net']).toBeUndefined();
+  });
+
+  test('运行态 processingUsers 不应写入持久化状态', async () => {
+    const config = {
+      workingDir: '/tmp/wa-bridge',
+      opencodeUrl: 'http://localhost:3000',
+      siliconflowKey: 'sk-test',
+      imageCapability: 'ocr',
+      debug: false,
+      allowlist: []
+    };
+
+    readJson.mockReturnValue({});
+    jest.useRealTimers();
+
+    const { stop } = await startBridge(config, '1.0.0');
+    stop();
+
+    const connectCall = createWhatsAppClient.mock.calls[0][0];
+    const onMessagesUpsert = connectCall.onMessagesUpsert;
+    const sender = 'persist@s.whatsapp.net';
+
+    mockOpenCodeClient.listMessages.mockReset();
+    mockOpenCodeClient.listMessages
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          info: { role: 'assistant', finish: 'stop' },
+          parts: [{ type: 'text', text: 'ok' }]
+        }
+      ])
+      .mockResolvedValueOnce([
+        {
+          info: { role: 'assistant', finish: 'stop' },
+          parts: [{ type: 'text', text: 'ok' }]
+        }
+      ]);
+    mockOpenCodeClient.sendPromptAsync.mockResolvedValue({});
+
+    await onMessagesUpsert({
+      messages: [{
+        key: { remoteJid: sender, fromMe: false },
+        message: { conversation: 'hello' }
+      }]
+    });
+
+    const writeJson = require('../src/utils/filesystem').writeJson;
+    const persistedStates = writeJson.mock.calls.map(call => call[1]);
+    expect(persistedStates.length).toBeGreaterThan(0);
+    persistedStates.forEach(state => {
+      expect(state.processingUsers).toBeUndefined();
+    });
   });
 
   test('长文本应分段流式发送', async () => {

@@ -68,21 +68,42 @@ describe('配置加载', () => {
     process.env.OPENCODE_URL = 'http://127.0.0.1:4096';
     process.env.SILICONFLOW_KEY = 'test_key';
     process.env.ALLOWLIST = '';
-    expect(() => loadConfig()).toThrow();
+    expect(() => loadConfig()).not.toThrow();
+    const config = loadConfig();
+    expect(config.allowlist).toEqual([]);
   });
 
   test('加载成功返回配置', () => {
     process.env.OPENCODE_URL = 'http://127.0.0.1:4096';
     process.env.SILICONFLOW_KEY = 'test_key';
     process.env.ALLOWLIST = '8613800138000,8613900139000';
+    process.env.OPENCODE_IMAGE_CAPABILITY = 'direct';
     process.env.WORKING_DIR = '/tmp';
     process.env.DEBUG = 'true';
     const config = loadConfig();
     expect(config.opencodeUrl).toBe('http://127.0.0.1:4096');
     expect(config.siliconflowKey).toBe('test_key');
     expect(config.allowlist).toEqual(['8613800138000', '8613900139000']);
+    expect(config.imageCapability).toBe('direct');
     expect(config.workingDir).toBe(path.resolve('/tmp'));
     expect(config.debug).toBe(true);
+  });
+
+  test('未配置图片能力时默认 auto', () => {
+    process.env.OPENCODE_URL = 'http://127.0.0.1:4096';
+    process.env.SILICONFLOW_KEY = 'test_key';
+    process.env.ALLOWLIST = '';
+    delete process.env.OPENCODE_IMAGE_CAPABILITY;
+    const config = loadConfig();
+    expect(config.imageCapability).toBe('auto');
+  });
+
+  test('图片能力配置非法时报错', () => {
+    process.env.OPENCODE_URL = 'http://127.0.0.1:4096';
+    process.env.SILICONFLOW_KEY = 'test_key';
+    process.env.ALLOWLIST = '';
+    process.env.OPENCODE_IMAGE_CAPABILITY = 'invalid';
+    expect(() => loadConfig()).toThrow('OPENCODE_IMAGE_CAPABILITY');
   });
 });
 
