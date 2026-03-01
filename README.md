@@ -9,254 +9,118 @@
 
 <p align="center">
   <strong>通过 WhatsApp 控制 OpenCode AI 助手</strong><br>
-  支持文本、图片、语音消息 | 多端实时同步 | 独立会话管理
+  TUI 向导 | 守护进程 | 多用户隔离 | 流式响应
 </p>
 
 ---
 
 ## ✨ 功能特性
 
-- 📱 **完整消息支持**
-  - 文本消息 - 双向实时同步
-  - 图片消息 - 自动保存到本地
-  - 语音消息 - ASR自动转录（由 [硅基流动](https://cloud.siliconflow.cn/i/ouQu1EpG) 提供免费支持）
+- �️ **便捷 CLI 工具**
+  - `wao` 命令行工具，提供交互式安装、配置和管理
+  - `wao setup` 自动检查环境、安装依赖、生成配置
+  - `wao start/stop` 后台服务管理，支持守护进程
 
-- 🔄 **智能处理**
-  - 长任务进度通知
-  - 输入状态实时显示
-  - 自动超时处理和会话恢复
+- �📱 **完整消息支持**
+  - 文本消息 - 双向实时同步，支持流式分段响应
+  - 图片消息 - 自动保存到本地并分析
+  - 语音消息 - ASR 自动转录（由 [硅基流动](https://cloud.siliconflow.cn/i/ouQu1EpG) 支持）
 
-- 🛡️ **安全特性**
+- 🔄 **高级交互**
+  - **多用户隔离** - 不同 WhatsApp 账号拥有独立会话
+  - **权限确认** - 敏感操作（如删除文件）需用户在 WhatsApp 确认
+  - **会话管理** - 自动清理过期会话，支持 `/new` 重置会话
+
+- 🛡️ **安全与稳定**
+  - **无需公网 IP** - 通过 WhatsApp 中继，直接远程控制本地 OpenCode，无需复杂的内网穿透
   - 手机号白名单限制
-  - 敏感信息环境变量配置
-  - 消息内容过滤
+  - 自动重连与超时处理
+  - 进程守护与日志管理
 
 ---
 
-## 📋 环境要求
+## � 快速安装
 
-- Node.js >= 18
-- OpenCode CLI 已安装并运行
-- WhatsApp 账号
-
----
-
-## 🚀 快速开始
-
-### 1. 克隆项目
+使用 `npm` 全局安装 CLI 工具：
 
 ```bash
-git clone https://github.com/jinghai/whatsapp-opencode.git
-cd whatsapp-opencode
+npm install -g whatsapp-opencode
 ```
 
-### 2. 安装依赖
+或者直接使用 `npx` 运行：
 
 ```bash
-npm install
+npx whatsapp-opencode setup
 ```
-
-### 3. 配置环境变量
-
-```bash
-cp .env.example .env
-# 编辑 .env 文件
-```
-
-### 4. 启动 OpenCode 服务
-
-```bash
-# 启动 OpenCode API 服务
-opencode serve --port 4096
-```
-
-### 5. 启动 Bridge
-
-```bash
-npm start
-```
-
-### 6. 连接 WhatsApp
-
-首次运行会显示二维码，按照屏幕提示扫描连接。
-
----
-
-## ⚙️ 配置说明
-
-### 环境变量
-
-| 变量 | 说明 | 默认值 |
-|------|------|--------|
-| `OPENCODE_URL` | OpenCode API 地址 | `http://127.0.0.1:4096` |
-| `SILICONFLOW_KEY` | 硅基流动 API Key | - |
-| `ALLOWLIST` | 允许的手机号(逗号分隔) | 所有用户 |
-
-### 获取 SiliconFlow API Key
-
-1. 访问 [硅基流动](https://cloud.siliconflow.cn/i/ouQu1EpG) （或 [官网](https://siliconflow.cn)）
-2. 注册并创建 API Key
-3. 复制 Key 到 `.env` 文件
-
-> 🎁 **福利**：通过 [我的邀请链接](https://cloud.siliconflow.cn/i/ouQu1EpG) 注册，你我都能获得免费额度（RPM/TPM 更高，体验更好）！
 
 ---
 
 ## 📖 使用指南
 
-### 基本操作
+### 1. 初始化配置
 
-- **发送文本** - 直接在 WhatsApp 输入文字
-- **发送图片** - 发送图片，自动保存并通知 OpenCode
-- **发送语音** - 发送语音，自动转文字后处理
-
-### 消息处理
-
-- 简单任务：立即回复
-- 长时间任务：
-  - 10秒后显示"对方正在输入..."
-  - 每5分钟发送进度通知
-  - 10分钟超时自动创建新会话
-
----
-
-## 🏗️ 架构
-
-```
-┌─────────────────┐
-│   WhatsApp      │
-│      App        │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ Baileys Library │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────────────────┐
-│    WhatsApp OpenCode Bridge │
-│  • 消息处理                │
-│  • 语音转录                │
-│  • 会话管理                │
-│  • 进度通知                │
-└────────┬────────────────────┘
-         │
-         ▼
-┌─────────────────────────────┐
-│      OpenCode API           │
-│   (http://localhost:4096)  │
-└─────────────────────────────┘
-```
-
----
-
-## 🔧 高级配置
-
-### PM2 进程管理（推荐）
+运行设置向导，它会自动检查 OpenCode 环境并引导配置：
 
 ```bash
-# 安装 PM2
-npm install -g pm2
-
-# 启动服务
-pm2 start bridge.js --name whatsapp-opencode
-
-# 查看日志
-pm2 logs whatsapp-opencode
-
-# 开机自启
-pm2 startup
-pm2 save
+wao setup
 ```
 
-### Docker 部署
+向导会帮助你：
+- 检查/安装 OpenCode CLI
+- 启动 OpenCode 服务
+- 配置 API URL 和密钥
+- 生成配置文件
+
+### 2. 启动服务
+
+启动后台守护进程：
 
 ```bash
-docker build -t whatsapp-opencode .
-docker run -d \
-  --name whatsapp-opencode \
-  -v $(pwd)/auth:/app/auth \
-  -v $(pwd)/data:/app/data \
-  -v $(pwd)/logs:/app/logs \
-  -v $(pwd)/media:/app/media \
-  -e OPENCODE_URL=http://host.docker.internal:4096 \
-  -e SILICONFLOW_KEY=your_api_key \
-  whatsapp-opencode
+wao start
 ```
 
----
+### 3. 连接 WhatsApp
 
-## 📁 目录结构
+首次启动时，你需要扫描终端显示的二维码登录 WhatsApp。
+登录成功后，你可以直接在 WhatsApp 中与你的 OpenCode 助手对话。
 
-```
-whatsapp-opencode/
-├── auth/              # WhatsApp 认证信息
-├── data/              # 会话状态数据
-├── logs/              # 运行日志
-├── media/             # 媒体文件(图片/语音)
-├── node_modules/      # 依赖
-├── bridge.js          # 主程序
-├── package.json       # 项目配置
-├── .env.example       # 环境变量示例
-└── README.md          # 说明文档
-```
+### 4. 常用命令
 
----
-
-## 🔢 版本管理
-
-采用 [Semantic Versioning](https://semver.org/)：
-
-- **MAJOR** (1.0.0): 不兼容的 API 变更
-- **MINOR** (1.1.0): 向后兼容的新功能
-- **PATCH** (1.0.1): 向后兼容的 bug 修复
-
-### 发布流程
-
-```bash
-# 1. 更新版本
-npm version patch  # 或 minor major
-
-# 2. 推送到 GitHub
-git push origin main
-git push --tags
-
-# 3. GitHub会自动创建 Release
-```
+| 命令 | 说明 |
+|------|------|
+| `wao setup` | 运行交互式配置向导 |
+| `wao start` | 启动后台服务 |
+| `wao stop` | 停止后台服务 |
+| `wao status` | 查看服务运行状态 (通过 PM2) |
+| `wao logs` | 查看服务日志 |
+| `wao config` | 查看当前配置 |
 
 ---
 
-## 📝 日志
+## ⚙️ 配置项
 
-日志保存在 `logs/` 目录：
-- `wa-bridge.log` - 主日志
+配置文件通常位于项目目录下的 `.env`。
 
-PM2 日志：
-- `pm2 logs whatsapp-opencode`
-
----
-
-## 🤝 贡献
-
-欢迎提交 Issue 和 PR！
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `OPENCODE_URL` | OpenCode API 地址 | `http://localhost:3000` |
+| `SILICONFLOW_KEY` | 硅基流动 API Key (用于语音转录，[获取 Key](https://cloud.siliconflow.cn/i/ouQu1EpG)) | - |
+| `ALLOWLIST` | 允许使用的手机号 (逗号分隔) | 空 (允许所有人) |
+| `WORKING_DIR` | 工作数据目录 | 当前目录 |
+| `DEBUG` | 开启调试日志 | `false` |
 
 ---
+
+## 🤝 贡献指南
+
+欢迎提交 Issue 和 Pull Request！
+
+1. Fork 本仓库
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 开启 Pull Request
 
 ## 📄 许可证
 
-MIT License - 详见 [LICENSE](LICENSE) 文件
-
----
-
-## 🙏 感谢
-
-- [OpenCode](https://opencode.ai) - 开源 AI 编程助手
-- [Baileys](https://github.com/WhiskeySockets/Baileys) - WhatsApp Web API
-- [硅基流动](https://cloud.siliconflow.cn/i/ouQu1EpG) - 免费语音转录服务
-
----
-
-<p align="center">
-  如果这个项目对你有帮助，请给个 ⭐️ Star！
-</p>
+本项目基于 [MIT 许可证](LICENSE) 开源。

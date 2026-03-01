@@ -1,132 +1,234 @@
-/**
- * WhatsApp OpenCode Bridge Tests
- */
+const fs = require('fs');
+const path = require('path');
+const { parseCommand, detectTaskType, isSenderAllowed } = require('../src/bridge/handlers');
+const { loadConfig } = require('../src/config');
+const { formatProgressInfo, buildProgressMessage } = require('../src/utils/messages');
 
-const assert = require('assert')
-const fs = require('fs')
-const path = require('path')
+describe('命令解析', () => {
+  test('解析 /new', () => {
+    expect(parseCommand('/new')).toBe('new');
+    expect(parseCommand('/NEW')).toBe('new');
+    expect(parseCommand('  /new  ')).toBe('new');
+  });
 
-// 测试工具函数
-function detectTaskType(text) {
-  const skillKeywords = {
-    'brainstorming': ['想法', '设计', '规划', 'brainstorm', 'idea', 'design', 'plan', '如何实现', '方案'],
-    'debugging': ['错误', 'bug', '报错', 'debug', 'error', '问题', '不工作', '失败'],
-    'tdd': ['测试', 'test', 'tdd', '单元测试', 'spec'],
-    'code-review': ['审查', 'review', '检查代码', '优化'],
-    'git': ['提交', 'commit', 'push', 'merge', 'pr', '分支']
-  }
-  
-  const textLower = text.toLowerCase()
-  for (const [skill, keywords] of Object.entries(skillKeywords)) {
-    if (keywords.some(kw => textLower.includes(kw))) {
-      return skill
-    }
-  }
-  return null
-}
+  test('解析 /help', () => {
+    expect(parseCommand('/help')).toBe('help');
+    expect(parseCommand('/h')).toBe('help');
+  });
 
-function parseCommand(text) {
-  const cmd = text.trim().toLowerCase()
-  if (cmd === '/new' || cmd === '/reset') return 'new'
-  if (cmd === '/help' || cmd === '/h') return 'help'
-  return null
-}
+  test('普通文本', () => {
+    expect(parseCommand('你好')).toBeNull();
+    expect(parseCommand('帮我写代码')).toBeNull();
+  });
+});
 
-// 测试用例
-const tests = {
-  '命令解析 - /new': () => {
-    assert.strictEqual(parseCommand('/new'), 'new')
-    assert.strictEqual(parseCommand('/NEW'), 'new')
-    assert.strictEqual(parseCommand('  /new  '), 'new')
-  },
-  
-  '命令解析 - /help': () => {
-    assert.strictEqual(parseCommand('/help'), 'help')
-    assert.strictEqual(parseCommand('/h'), 'help')
-  },
-  
-  '命令解析 - 普通文本': () => {
-    assert.strictEqual(parseCommand('你好'), null)
-    assert.strictEqual(parseCommand('帮我写代码'), null)
-  },
-  
-  '任务检测 - debugging': () => {
-    assert.strictEqual(detectTaskType('帮我修复这个bug'), 'debugging')
-    assert.strictEqual(detectTaskType('这里有错误'), 'debugging')
-    assert.strictEqual(detectTaskType('debug this'), 'debugging')
-  },
-  
-  '任务检测 - brainstorming': () => {
-    assert.strictEqual(detectTaskType('帮我设计一个方案'), 'brainstorming')
-    assert.strictEqual(detectTaskType('如何实现这个功能'), 'brainstorming')
-    assert.strictEqual(detectTaskType('plan this feature'), 'brainstorming')
-  },
-  
-  '任务检测 - tdd': () => {
-    assert.strictEqual(detectTaskType('写单元测试'), 'tdd')
-    assert.strictEqual(detectTaskType('test this'), 'tdd')
-  },
-  
-  '任务检测 - git': () => {
-    assert.strictEqual(detectTaskType('帮我提交代码'), 'git')
-    assert.strictEqual(detectTaskType('commit changes'), 'git')
-  },
-  
-  '任务检测 - 普通文本': () => {
-    assert.strictEqual(detectTaskType('你好'), null)
-    assert.strictEqual(detectTaskType('what is this'), null)
-  },
-  
-  '版本号格式': () => {
-    const pkg = require('../package.json')
-    assert.match(pkg.version, /^\d+\.\d+\.\d+$/, '版本号格式应为 x.y.z')
-  },
-  
-  '包名验证': () => {
-    const pkg = require('../package.json')
-    assert.strictEqual(pkg.name, 'whatsapp-opencode')
-  },
-  
-  '必要文件存在': () => {
-    const files = ['bridge.js', 'package.json', 'README.md', 'workflow.sh']
-    files.forEach(f => {
-      assert(fs.existsSync(path.join(__dirname, '..', f)), `${f} 应存在`)
-    })
-  },
-  
-  '目录结构': () => {
-    const dirs = ['auth', 'data', 'logs', 'media']
-    dirs.forEach(d => {
-      const dirPath = path.join(__dirname, '..', d)
-      // 目录可能不存在，但应该可以创建
-      if (!fs.existsSync(dirPath)) {
-        fs.mkdirSync(dirPath, { recursive: true })
+describe('任务检测', () => {
+  test('debugging', () => {
+    expect(detectTaskType('帮我修复这个bug')).toBe('debugging');
+    expect(detectTaskType('这里有错误')).toBe('debugging');
+    expect(detectTaskType('debug this')).toBe('debugging');
+  });
+
+  test('brainstorming', () => {
+    expect(detectTaskType('帮我设计一个方案')).toBe('brainstorming');
+    expect(detectTaskType('如何实现这个功能')).toBe('brainstorming');
+    expect(detectTaskType('plan this feature')).toBe('brainstorming');
+  });
+
+  test('tdd', () => {
+    expect(detectTaskType('写单元测试')).toBe('tdd');
+    expect(detectTaskType('test this')).toBe('tdd');
+  });
+
+  test('git', () => {
+    expect(detectTaskType('帮我提交代码')).toBe('git');
+    expect(detectTaskType('commit changes')).toBe('git');
+  });
+
+  test('普通文本', () => {
+    expect(detectTaskType('你好')).toBeNull();
+    expect(detectTaskType('what is this')).toBeNull();
+  });
+});
+
+describe('配置加载', () => {
+  const originalEnv = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  test('缺少必填项时报错', () => {
+    delete process.env.OPENCODE_URL;
+    delete process.env.SILICONFLOW_KEY;
+    expect(() => loadConfig()).toThrow();
+  });
+
+  test('缺少白名单时报错', () => {
+    process.env.OPENCODE_URL = 'http://127.0.0.1:4096';
+    process.env.SILICONFLOW_KEY = 'test_key';
+    process.env.ALLOWLIST = '';
+    expect(() => loadConfig()).toThrow();
+  });
+
+  test('加载成功返回配置', () => {
+    process.env.OPENCODE_URL = 'http://127.0.0.1:4096';
+    process.env.SILICONFLOW_KEY = 'test_key';
+    process.env.ALLOWLIST = '8613800138000,8613900139000';
+    process.env.WORKING_DIR = '/tmp';
+    process.env.DEBUG = 'true';
+    const config = loadConfig();
+    expect(config.opencodeUrl).toBe('http://127.0.0.1:4096');
+    expect(config.siliconflowKey).toBe('test_key');
+    expect(config.allowlist).toEqual(['8613800138000', '8613900139000']);
+    expect(config.workingDir).toBe(path.resolve('/tmp'));
+    expect(config.debug).toBe(true);
+  });
+});
+
+describe('白名单校验', () => {
+  test('白名单仅填本地号也能匹配带区号发送者', () => {
+    expect(isSenderAllowed('8615800937529@s.whatsapp.net', ['15800937529'])).toBe(true);
+  });
+
+  test('白名单带 + 号也能匹配发送者', () => {
+    expect(isSenderAllowed('8615800937529@s.whatsapp.net', ['+8615800937529'])).toBe(true);
+  });
+});
+
+describe('消息辅助', () => {
+  test('formatProgressInfo 空输入返回 null', () => {
+    expect(formatProgressInfo([], 0)).toBeNull();
+  });
+
+  test('buildProgressMessage 无进度时返回默认文案', () => {
+    const message = buildProgressMessage(60, [], 0);
+    expect(message).toContain('🔄 正在处理中...');
+    expect(message).toContain('⏳ 对方正在输入...');
+  });
+
+  test('buildProgressMessage 有进度时包含等待时长', () => {
+    const msgs = [
+      {
+        info: { role: 'assistant' },
+        parts: [{ type: 'reasoning', text: '正在分析' }]
       }
-      assert(fs.existsSync(dirPath), `${d} 目录应存在`)
-    })
-  }
-}
+    ];
+    const message = buildProgressMessage(120, msgs, 0);
+    expect(message).toContain('📋 当前进度');
+    expect(message).toContain('已等待2分钟');
+  });
 
-// 运行测试
-let passed = 0
-let failed = 0
+  test('formatProgressInfo 超长工具命令会被省略', () => {
+    const longCommand = 'a'.repeat(80);
+    const msgs = [
+      {
+        info: { role: 'assistant' },
+        parts: [
+          {
+            type: 'tool',
+            tool: 'RunCommand',
+            state: { status: 'running', input: { command: longCommand } }
+          }
+        ]
+      }
+    ];
+    const info = formatProgressInfo(msgs, 0);
+    expect(info).toContain('正在执行: RunCommand - ');
+    expect(info.endsWith('...')).toBe(true);
+  });
 
-console.log('\n🧪 WhatsApp OpenCode Bridge Tests\n')
-console.log('='.repeat(50))
+  test('formatProgressInfo 工具输入为空白不显示连字符', () => {
+    const msgs = [
+      {
+        info: { role: 'assistant' },
+        parts: [
+          {
+            type: 'tool',
+            tool: 'RunCommand',
+            state: { status: 'running', input: { command: '   ' } }
+          }
+        ]
+      }
+    ];
+    const info = formatProgressInfo(msgs, 0);
+    expect(info).toBe('• 正在执行: RunCommand');
+  });
 
-for (const [name, test] of Object.entries(tests)) {
-  try {
-    test()
-    console.log(`✅ ${name}`)
-    passed++
-  } catch (e) {
-    console.log(`❌ ${name}`)
-    console.log(`   Error: ${e.message}`)
-    failed++
-  }
-}
+  test('formatProgressInfo 工具名为空白显示 unknown', () => {
+    const msgs = [
+      {
+        info: { role: 'assistant' },
+        parts: [
+          {
+            type: 'tool',
+            tool: '   ',
+            state: { status: 'running', input: { command: 'ls' } }
+          }
+        ]
+      }
+    ];
+    const info = formatProgressInfo(msgs, 0);
+    expect(info).toBe('• 正在执行: unknown - ls');
+  });
 
-console.log('='.repeat(50))
-console.log(`\n📊 结果: ${passed} passed, ${failed} failed\n`)
+  test('formatProgressInfo 超长 reasoning 会被省略', () => {
+    const longReasoning = 'r'.repeat(210);
+    const msgs = [
+      {
+        info: { role: 'assistant' },
+        parts: [{ type: 'reasoning', text: longReasoning }]
+      }
+    ];
+    const info = formatProgressInfo(msgs, 0);
+    expect(info).toContain('💭 ');
+    expect(info.endsWith('...')).toBe(true);
+  });
 
-process.exit(failed > 0 ? 1 : 0)
+  test('formatProgressInfo 选择最新运行中的工具', () => {
+    const msgs = [
+      {
+        info: { role: 'assistant' },
+        parts: [
+          {
+            type: 'tool',
+            tool: 'OldTool',
+            state: { status: 'running', input: { command: 'old' } }
+          }
+        ]
+      },
+      {
+        info: { role: 'assistant' },
+        parts: [
+          {
+            type: 'tool',
+            tool: 'NewTool',
+            state: { status: 'running', input: { command: 'new' } }
+          }
+        ]
+      }
+    ];
+    const info = formatProgressInfo(msgs, 0);
+    expect(info).toBe('• 正在执行: NewTool - new');
+  });
+});
+
+describe('基础检查', () => {
+  test('版本号格式', () => {
+    const pkg = require('../package.json');
+    expect(pkg.version).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
+  test('包名正确', () => {
+    const pkg = require('../package.json');
+    expect(pkg.name).toBe('whatsapp-opencode');
+  });
+
+  test('文档索引存在', () => {
+    expect(fs.existsSync(path.join(__dirname, '..', 'docs', 'INDEX.md'))).toBe(true);
+  });
+
+  test('根目录入口文件已移除', () => {
+    expect(fs.existsSync(path.join(__dirname, '..', 'bridge.js'))).toBe(false);
+  });
+});

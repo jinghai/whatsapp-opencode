@@ -26,6 +26,7 @@ git pull origin main
 echo "🧪 运行测试..."
 npm test
 npm run lint
+npm run test:coverage
 
 # 运行本地集成测试
 echo "🔍 运行集成测试..."
