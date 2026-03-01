@@ -16,7 +16,7 @@ function createLogger(workingDir, options = {}) {
   return P(
     { 
       level: debug ? 'debug' : 'info',
-      timestamp: P.stdTimeFunctions.isoTime
+      timestamp: P.stdTimeFunctions ? P.stdTimeFunctions.isoTime : () => `,"time":"${new Date().toISOString()}"`
     }, 
     P.destination({ dest: logFile, sync })
   );
